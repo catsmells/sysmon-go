@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>System Info</title>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<style>
+		body { font-family: Arial, sans-serif; background-color: #222; color: #fff; margin: 0; padding: 20px; }
+		.container { max-width: 900px; margin: auto; }
+		h1, h2 { text-align: center; }
+		table { width: 100%; margin: 20px 0; border-collapse: collapse; }
+		th, td { padding: 8px 12px; border: 1px solid #444; text-align: left; }
+		th { background-color: #333; }
+		td { background-color: #444; }
+		canvas { background: #333; display: block; margin: 0 auto; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>System Information</h1>
+		<table>
+			<tr><th>OS</th><td id="os"></td></tr>
+			<tr><th>Architecture</th><td id="arch"></td></tr>
+			<tr><th>Hostname</th><td id="hostname"></td></tr>
+			<tr><th>Uptime</th><td id="uptime"></td></tr>
+			<tr><th>CPU</th><td id="cpu"></td></tr>
+			<tr><th>Memory Total</th><td id="memTotal"></td></tr>
+			<tr><th>Memory Used</th><td id="memUsed"></td></tr>
+			<tr><th>Memory Free</th><td id="memFree"></td></tr>
+		</table>
+		<h2>Network Usage</h2>
+		<canvas id="networkChart" width="800" height="400"></canvas>
+		<h2>Running Processes</h2>
+		<table id="process-table">
+			<thead>
+				<tr>
+					<th>PID</th>
+					<th>Name</th>
+					<th>CPU Usage</th>
+					<th>Memory Usage</th>
+				</tr>
+			</thead>
+			<tbody></tbody>
+		</table>
+	</div>
+	<script>
+		let networkChart;
+		let networkLabels = [];
+		let bytesSentData = [];
+		let bytesRecvData = [];
+		function initNetworkChart() {
+			const ctx = document.getElementById('networkChart').getContext('2d');
+			networkChart = new Chart(ctx, {
+				type: 'line',
+				data: {
+					labels: networkLabels,
+					datasets: [
+						{
+							label: 'Bytes Sent',
+							data: bytesSentData,
+							borderColor: 'rgba(255, 99, 132, 1)',
+							backgroundColor: 'rgba(255, 99, 132, 0.2)',
+							fill: true,
+						},
+						{
+							label: 'Bytes Received',
+							data: bytesRecvData,
+							borderColor: 'rgba(54, 162, 235, 1)',
+							backgroundColor: 'rgba(54, 162, 235, 0.2)',
+							fill: true,
+						}
+					]
+				},
+				options: {
+					scales: {
+						y: { beginAtZero: true }
+					}
+				}
+			});
+		}
+		function updateNetworkChart(data) {
+			const now = new Date().toLocaleTimeString();
+			networkLabels.push(now);
+			if (networkLabels.length > 10) {
+				networkLabels.shift();
+				bytesSentData.shift();
+				bytesRecvData.shift();
+			}
+			let totalSent = 0, totalRecv = 0;
+			data.network.forEach(net => {
+				totalSent += net.bytes_sent;
+				totalRecv += net.bytes_recv;
+			});
+			bytesSentData.push(totalSent);
+			bytesRecvData.push(totalRecv);
+			networkChart.update();
+		}
+		function fetchSystemInfo() {
+			fetch('/api/systeminfo')
+				.then(response => response.json())
+				.then(data => {
+					document.getElementById('os').textContent = data.os;
+					document.getElementById('arch').textContent = data.arch;
+					document.getElementById('hostname').textContent = data.hostname;
+					document.getElementById('uptime').textContent = data.uptime;
+					document.getElementById('cpu').textContent = data.cpu;
+					document.getElementById('memTotal').textContent = data.mem_total;
+					document.getElementById('memUsed').textContent = data.mem_used;
+					document.getElementById('memFree').textContent = data.mem_free;
+					updateNetworkChart(data);
+				})
+				.catch(error => console.error('Error fetching system info:', error));
+		}
+		function fetchProcesses() {
+			fetch('/api/processes')
+				.then(response => response.json())
+				.then(data => {
+					const tableBody = document.querySelector('#process-table tbody');
+					tableBody.innerHTML = '';
+					data.forEach(proc => {
+						const row = document.createElement('tr');
+						row.innerHTML = `
+							<td>${proc.pid}</td>
+							<td>${proc.name}</td>
+							<td>${proc.cpu}</td>
+							<td>${proc.mem}</td>
+						`;
+						tableBody.appendChild(row);
+					});
+				})
+				.catch(error => console.error('Error fetching processes:', error));
+		}
+		initNetworkChart();
+		setInterval(fetchSystemInfo, 5000);
+		setInterval(fetchProcesses, 5000);
+		fetchSystemInfo();
+		fetchProcesses();
+	</script>
+</body>
+</html>
